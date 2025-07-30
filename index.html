@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>병동 힌트 게임 - 두 팀 예측 제출</title>
+</head>
+<body>
+  <h2>🎲 병동 힌트 게임 (Seed 선택 및 두 팀 예측 제출)</h2>
+
+  <label for="seedInput">Seed 입력 (1~4): </label>
+  <input type="number" id="seedInput" min="1" max="4" value="1" />
+  <button onclick="startGame()">게임 시작</button>
+
+  <hr>
+
+  <label for="wardName">병동 이름 입력 (A~E): </label>
+  <input type="text" id="wardName" maxlength="1" placeholder="예: A" />
+  <button onclick="showHint()">힌트 받기</button>
+
+  <pre id="output"></pre>
+
+  <hr>
+
+  <h3>팀 1 예측 제출</h3>
+  <form id="predictionForm1" onsubmit="return submitPrediction('팀 1');">
+    <label>A: <input type="number" id="predA1" min="0" required></label><br/>
+    <label>B: <input type="number" id="predB1" min="0" required></label><br/>
+    <label>C: <input type="number" id="predC1" min="0" required></label><br/>
+    <label>D: <input type="number" id="predD1" min="0" required></label><br/>
+    <label>E: <input type="number" id="predE1" min="0" required></label><br/>
+    <button type="submit">팀 1 예측 제출</button>
+  </form>
+
+  <pre id="scoreOutput1"></pre>
+
+  <hr>
+
+  <h3>팀 2 예측 제출</h3>
+  <form id="predictionForm2" onsubmit="return submitPrediction('팀 2');">
+    <label>A: <input type="number" id="predA2" min="0" required></label><br/>
+    <label>B: <input type="number" id="predB2" min="0" required></label><br/>
+    <label>C: <input type="number" id="predC2" min="0" required></label><br/>
+    <label>D: <input type="number" id="predD2" min="0" required></label><br/>
+    <label>E: <input type="number" id="predE2" min="0" required></label><br/>
+    <button type="submit">팀 2 예측 제출</button>
+  </form>
+
+  <pre id="scoreOutput2"></pre>
+
+  <hr>
+  <pre id="finalResult"></pre>
+
+  <!-- number-to-words.min.js가 필요하면 추가 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/number-to-words/1.2.4/number-to-words.min.js"></script>
+  <script src="hint.js"></script> <!-- hint.js 내부에 힌트 함수가 정의되어 있어야 합니다 -->
+
+  <script>
+    const roomData = {
+      1: { A: 22, B: 13, C: 37, D: 19, E: 9 },
+      2: { A: 14, B: 29, C: 11, D: 27, E: 19 },
+      3: { A: 33, B: 17, C: 20, D: 18, E: 22 },
+      4: { A: 15, B: 34, C: 16, D: 23, E: 12 }
+    };
+
+    let currentWardData = null;
+    let turnCount = 0;
+    const maxTurns = 12;
+
+    let scores = {
+      '팀 1': null,
+      '팀 2': null
+    };
+
+    // 중복된 힌트 문장 저장
+    const usedHints = new Set();
+
+    function startGame() {
+      const seed = parseInt(document.getElementById('seedInput').value);
+      if (!(seed >=1 && seed <=4)) {
+        alert('1에서 4 사이 숫자를 입력하세요.');
+        return;
+      }
+      currentWardData = roomData[seed];
+      turnCount = 0;
+      scores = { '팀 1': null, '팀 2': null };
+      usedHints.clear();  // 힌트 중복 초기화
+      document.getElementById('output').textContent = `Seed ${seed} 선택됨. 게임 시작!\n`;
+      document.getElementById('scoreOutput1').textContent = '';
+      document.getElementById('scoreOutput2').textContent = '';
+      document.getElementById('finalResult').textContent = '';
+      document.getElementById('predictionForm1').reset();
+      document.getElementById('predictionForm2').reset();
+    }
+
+    function showHint() {
+      if (!currentWardData) {
+        alert('먼저 게임을 시작해주세요.');
+        return;
+      }
+      if (turnCount >= maxTurns) {
+        alert('10번의 힌트를 모두 받았습니다. 게임을 다시 시작하세요.');
+        return;
+      }
+
+      const wardName = document.getElementById('wardName').value.toUpperCase();
+      if (!currentWardData.hasOwnProperty(wardName)) {
+        alert('올바른 병동 이름을 입력하세요 (A, B, C, D, E 중 하나)');
+        return;
+      }
+
+      const num = currentWardData[wardName];
+
+      // 단일 숫자만 받는 힌트 함수 배열 (hint.js에서 정의되어 있어야 함)
+      const hintFunctions = [
+        generateOddEvenClue,
+        generateDigitCountClue,
+        generateDivisorClue,
+        generateDigitSumClue,
+        generateGreaterThanClue,
+        generateModClue,
+        generateReverseCompareClue,
+      ];
+
+      // roomData 필요 힌트 함수 배열
+      const roomHintFunctions = [
+        generateEqualSumPairsClue,
+        generateRankClue,
+      ];
+
+      function getRandomHint(num, roomData) {
+        const allHints = [...hintFunctions, ...roomHintFunctions];
+        let attempts = 0;
+        while (attempts < 20) { // 최대 20번 시도
+          const idx = Math.floor(Math.random() * allHints.length);
+          const selectedFn = allHints[idx];
+          let hintResult;
+          if (hintFunctions.includes(selectedFn)) {
+            hintResult = selectedFn(num);
+          } else {
+            hintResult = selectedFn(roomData, wardName);
+          }
+          if (!usedHints.has(hintResult.clue)) {
+            usedHints.add(hintResult.clue);
+            return hintResult;
+          }
+          attempts++;
+        }
+        // 중복 피할 수 없으면 기본 힌트 반환
+        return { clue: "더 이상 중복되지 않는 새로운 힌트가 없습니다." };
+      }
+
+      const result = getRandomHint(num, currentWardData);
+      turnCount++;
+
+      const output = document.getElementById('output');
+      output.textContent += `\n[${turnCount}] 병동 ${wardName} 힌트: ${result.clue}`;
+
+      if (turnCount === maxTurns) {
+        output.textContent += `\n\n🔔 힌트 12번 모두 사용 완료! 이제 예측을 제출하세요.`;
+      }
+    }
+
+    function submitPrediction(teamName) {
+      if (!currentWardData) {
+        alert('먼저 게임을 시작해주세요.');
+        return false;
+      }
+
+      // 각 병동 예측값 가져오기
+      const pred = {};
+      for (const ward of ['A','B','C','D','E']) {
+        const inputId = `pred${ward}${teamName === '팀 1' ? '1' : '2'}`;
+        const val = parseInt(document.getElementById(inputId).value);
+        if (isNaN(val) || val < 0) {
+          alert(`${teamName} - 병동 ${ward}에 올바른 숫자를 입력하세요.`);
+          return false;
+        }
+        pred[ward] = val;
+      }
+
+      let totalScore = 0;
+      let scoreDetails = `${teamName} 점수 상세:\n`;
+
+      for (const ward of ['A','B','C','D','E']) {
+        const actual = currentWardData[ward];
+        const estimate = pred[ward];
+
+        if (estimate === actual) {
+          const score = actual + 10;
+          totalScore += score;
+          scoreDetails += `✅ 병동 ${ward}: 정확! 점수 ${score}점 (실제값 ${actual} + 보너스 10점)\n`;
+        } else if (estimate < actual) {
+          totalScore += estimate;
+          scoreDetails += `⚠️ 병동 ${ward}: 과소 추정, 점수 ${estimate}점\n`;
+        } else {
+          scoreDetails += `❌ 병동 ${ward}: 과대 추정, 점수 0점 (병동 폐쇄)\n`;
+        }
+      }
+
+      scoreDetails += `\n총 점수: ${totalScore}점`;
+
+      // 결과 출력
+      const scoreOutputId = teamName === '팀 1' ? 'scoreOutput1' : 'scoreOutput2';
+      document.getElementById(scoreOutputId).textContent = scoreDetails;
+
+      scores[teamName] = totalScore;
+
+      // 두 팀 점수가 다 있으면 최종 승자 출력
+      if (scores['팀 1'] !== null && scores['팀 2'] !== null) {
+        const finalResultEl = document.getElementById('finalResult');
+        if (scores['팀 1'] > scores['팀 2']) {
+          finalResultEl.textContent = `🏆 최종 승리: 팀 1 (점수 ${scores['팀 1']} vs ${scores['팀 2']})`;
+        } else if (scores['팀 2'] > scores['팀 1']) {
+          finalResultEl.textContent = `🏆 최종 승리: 팀 2 (점수 ${scores['팀 2']} vs ${scores['팀 1']})`;
+        } else {
+          finalResultEl.textContent = `🤝 무승부 (점수 ${scores['팀 1']} vs ${scores['팀 2']})`;
+        }
+      }
+
+      return false; // form 제출 막기
+    }
+  </script>
+</body>
+</html>
